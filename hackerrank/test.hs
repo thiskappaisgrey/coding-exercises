@@ -44,11 +44,22 @@ getProgramAndTestCaseFiles path = reduce F.list $ do
 
 -- A run function consists of a FilePath, the inputs to the program and outputs something 
 type RunFn = FilePath -> Text -> Shell Line
-
 -- the turtle available in nix is 1.5.25, so I have to use "encodeString"..
-runHaskell :: RunFn
-runHaskell f input =
-  inproc "runhaskell" [pack $ encodeString f] (toLines $ pure input)
+-- Create a run function from a command
+createRunFn :: Text -> RunFn
+createRunFn command  = (\file input -> inproc command [pack $ encodeString file] (toLines $ pure input))
+  
+-- I can support many run fns here
+getRunFn :: FilePath -> RunFn
+getRunFn file =
+  let
+    ext = extension file
+  in
+    case ext of
+      (Just "hs") -> createRunFn "runhaskell"
+      (Just "py") -> createRunFn "python3"
+      Nothing -> \_ _ ->  return (unsafeTextToLine "Test function not implemented")
+
 
 --  1. For each test, run the program with the input as stdin
 --  2. Run diff on the output of the program against the expected output
@@ -88,6 +99,7 @@ main = do
   when (not $ isDirectory s) $ fail "User error, run this script on directories not files."
   f <- getProgramAndTestCaseFiles path
   -- print f
-  mapM_ (runTestCase runHaskell) f
+  -- TODO pick the right test func based on extension 
+  mapM_ (\files -> runTestCase (getRunFn $ fst files) files) f
 
   
